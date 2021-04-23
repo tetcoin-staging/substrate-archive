@@ -214,6 +214,7 @@ where
 	B::Hash: Unpin,
 {
 	async fn handle(&mut self, _: Die, ctx: &mut Context<Self>) {
+		log::info!("Blocks dying");
 		ctx.stop();
 	}
 }

@@ -122,27 +122,19 @@ where
 		let mut listener = PgListener::connect(&self.pg_url).await?;
 		let channels = self.channels.iter().map(String::from).collect::<Vec<String>>();
 		listener.listen_all(channels.iter().map(|s| s.as_ref())).await?;
-		let mut conn = PgConnection::connect(&self.pg_url).await.unwrap();
+		let mut conn = PgConnection::connect(&self.pg_url).await?;
 
 		let fut = async move {
 			let mut listener = listener.into_stream();
 			loop {
 				let mut listen_fut = listener.next().fuse();
-				// pin_mut!(listen_fut);
 
 				futures::select! {
 					notif = listen_fut => {
 						match notif {
-							Some(Ok(v)) => {
-								let fut = self.handle_listen_event(v, &mut conn);
-								fut.await;
-							},
-							Some(Err(e)) => {
-								log::error!("{:?}", e);
-							},
-							None => {
-								break;
-							},
+							Some(Ok(v)) => self.handle_listen_event(v, &mut conn).await,
+							Some(Err(e)) => log::error!("{:?}", e),
+							None => break,
 						}
 					},
 					r = rx.recv_async() => {
@@ -158,6 +150,7 @@ where
 			}
 			// collect the rest of the results, before exiting, as long as the collection completes
 			// in a reasonable amount of time
+			log::info!("collecting results");
 			let timeout = smol::Timer::after(Duration::from_secs(1));
 			futures::select! {
 				_ = FutureExt::fuse(timeout) => {},

@@ -114,5 +114,6 @@ where
 {
 	async fn handle(&mut self, _: Die, ctx: &mut Context<Self>) {
 		ctx.stop();
+		log::info!("Metadata dying!");
 	}
 }

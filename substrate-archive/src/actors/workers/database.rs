@@ -111,7 +111,12 @@ impl DatabaseActor {
 	}
 }
 
-impl Actor for DatabaseActor {}
+#[async_trait::async_trait]
+impl Actor for DatabaseActor {
+	async fn stopped(&mut self) {
+		self.db.pool().close().await;
+	}
+}
 
 #[async_trait::async_trait]
 impl<B> Handler<Block<B>> for DatabaseActor
@@ -264,6 +269,7 @@ impl Handler<GetState> for DatabaseActor {
 #[async_trait::async_trait]
 impl Handler<Die> for DatabaseActor {
 	async fn handle(&mut self, _: Die, ctx: &mut Context<Self>) {
+		log::info!("Database dying!");
 		ctx.stop();
 	}
 }

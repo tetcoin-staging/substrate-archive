@@ -201,13 +201,13 @@ where
 		let _handle = executor
 			.spawn(async move {
 				loop {
-					// <BoxFuture<'_, Result<(), Disconnected>>>
 					let fut = (
 						Box::pin(actors.blocks.send(Crawl)),
 						Box::pin(actors.storage.send(SendStorage)),
 						Box::pin(actors.storage.send(SendTraces)),
 					);
 					if let (Err(_), Err(_), Err(_)) = future::join3(fut.0, fut.1, fut.2).await {
+						log::info!("Tick stopping");
 						break;
 					}
 				}
@@ -223,7 +223,9 @@ where
 			Box::pin(self.metadata.send(Die)),
 			Box::pin(self.db.send(Die)),
 		];
+		log::info!("Killing actors");
 		future::join_all(fut).await;
+		log::info!("futures joined");
 		Ok(())
 	}
 }
@@ -342,12 +344,10 @@ where
 
 		loop {
 			match rx.try_recv() {
-				Err(flume::TryRecvError::Empty) => {
-					log::info!("Recv chan empty");
-					continue;
-				}
+				Err(flume::TryRecvError::Empty) => log::info!("Recv chan empty"),
 				Err(flume::TryRecvError::Disconnected) => break,
 				Ok(_) => {
+					log::info!("Active Threads: {}, queued jobs: {}", runner.active_count(), runner.queued_count());
 					log::info!("closing main loop");
 					break;
 				}
@@ -359,8 +359,8 @@ where
 				Err(e) => log::error!("{:?}", e),
 			}
 		}
-		actors.kill().await?;
 		listener.kill().await;
+		actors.kill().await?;
 		Ok(())
 	}
 
@@ -465,27 +465,3 @@ where
 		&self.config
 	}
 }
-/*
-struct Engine<B, C, H, D>
-where
-	B: Send + Sync + 'static,
-	H: Send + Sync + 'static,
-	D: Send + Sync + 'static,
-	C: Send + Sync + 'static,
-{
-	config: SystemConfig<B, D>,
-	actors: Actors<B, H, D>,
-	pool: PgPool,
-}
-
-impl<B, C, H, D> Engine<B, C, H, D> {
-	fn new(conf: SystemConfig<B, D>, client: Arc<C>, pool: PgPool) -> Result<Self> {
-		let actors =
-		Self {
-			conf, client, pool
-		}
-	}
-}
-
-// impl<B, H, D> Engine<B, H, D> {}
-*/

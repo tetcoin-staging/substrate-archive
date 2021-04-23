@@ -90,7 +90,6 @@ impl Database {
 		Self { pool, url }
 	}
 
-	#[allow(unused)]
 	pub async fn insert(&self, data: impl Insert) -> Result<u64> {
 		let mut conn = self.pool.acquire().await?;
 		let res = data.insert(&mut conn).await?;

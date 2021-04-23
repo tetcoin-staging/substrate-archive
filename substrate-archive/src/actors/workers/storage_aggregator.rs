@@ -111,6 +111,7 @@ impl<H: Hash> Handler<Traces> for StorageAggregator<H> {
 #[async_trait::async_trait]
 impl<H: Hash> Handler<Die> for StorageAggregator<H> {
 	async fn handle(&mut self, _: Die, ctx: &mut Context<Self>) {
+		log::info!("Storage dying!");
 		ctx.stop();
 	}
 }
