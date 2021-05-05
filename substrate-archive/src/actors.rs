@@ -344,7 +344,7 @@ where
 
 		loop {
 			match rx.try_recv() {
-				Err(flume::TryRecvError::Empty) => log::info!("Recv chan empty"),
+				Err(flume::TryRecvError::Empty) => (),
 				Err(flume::TryRecvError::Disconnected) => break,
 				Ok(_) => {
 					log::info!("Active Threads: {}, queued jobs: {}", runner.active_count(), runner.queued_count());
