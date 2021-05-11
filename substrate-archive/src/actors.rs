@@ -151,17 +151,17 @@ where
 	}
 }
 
-struct Actors<Block: Send + Sync + 'static, H: Send + Sync + 'static, Db: Send + Sync + 'static> {
-	storage: Address<workers::StorageAggregator<H>>,
+struct Actors<Block: Send + Sync + 'static, Db: Send + Sync + 'static> {
+	// storage: Address<workers::StorageAggregator<H>>,
 	blocks: Address<workers::BlocksIndexer<Block, Db>>,
 	metadata: Address<workers::MetadataActor<Block>>,
 	db: Address<DatabaseActor>,
 }
 
-impl<B: Send + Sync + 'static, H: Send + Sync + 'static, D: Send + Sync + 'static> Clone for Actors<B, H, D> {
+impl<B: Send + Sync + 'static, D: Send + Sync + 'static> Clone for Actors<B, D> {
 	fn clone(&self) -> Self {
 		Self {
-			storage: self.storage.clone(),
+			// storage: self.storage.clone(),
 			blocks: self.blocks.clone(),
 			metadata: self.metadata.clone(),
 			db: self.db.clone(),
@@ -169,7 +169,7 @@ impl<B: Send + Sync + 'static, H: Send + Sync + 'static, D: Send + Sync + 'stati
 	}
 }
 
-impl<Block, Db> Actors<Block, Block::Hash, Db>
+impl<Block, Db> Actors<Block, Db>
 where
 	Block: BlockT + Unpin,
 	Db: ReadOnlyDb + 'static,
@@ -180,17 +180,17 @@ where
 		let db = workers::DatabaseActor::new(conf.pg_url().into(), conf.executor.clone()).await?.create(None);
 		let (db, fut) = db.run();
 		conf.executor.spawn(fut).detach();
-		let storage = workers::StorageAggregator::new(db.clone()).create(None);
+		// let storage = workers::StorageAggregator::new(db.clone()).create(None);
 		let metadata = workers::MetadataActor::new(db.clone(), conf.meta().clone()).await?.create(None);
-		let (storage, fut) = storage.run();
-		conf.executor.spawn(fut).detach();
+		// let (storage, fut) = storage.run();
+		// conf.executor.spawn(fut).detach();
 		let (metadata, fut) = metadata.run();
 		conf.executor.spawn(fut).detach();
 		let blocks = workers::BlocksIndexer::new(&conf, db.clone(), metadata.clone()).create(None);
 		let (blocks, fut) = blocks.run();
 		conf.executor.spawn(fut).detach();
 
-		Ok(Actors { storage, blocks, metadata, db })
+		Ok(Actors { blocks, metadata, db })
 	}
 
 	// Run a future that sends actors a signal to progress every X seconds
@@ -203,10 +203,10 @@ where
 				loop {
 					let fut = (
 						Box::pin(actors.blocks.send(Crawl)),
-						Box::pin(actors.storage.send(SendStorage)),
-						Box::pin(actors.storage.send(SendTraces)),
+						// Box::pin(actors.storage.send(SendStorage)),
+						// Box::pin(actors.storage.send(SendTraces)),
 					);
-					if let (Err(_), Err(_), Err(_)) = future::join3(fut.0, fut.1, fut.2).await {
+					if let Err(_) = fut.0.await {
 						log::info!("Tick stopping");
 						break;
 					}
@@ -218,7 +218,7 @@ where
 
 	async fn kill(self) -> Result<()> {
 		let fut: Vec<BoxFuture<'_, Result<(), Disconnected>>> = vec![
-			Box::pin(self.storage.send(Die)),
+			// Box::pin(self.storage.send(Die)),
 			Box::pin(self.blocks.send(Die)),
 			Box::pin(self.metadata.send(Die)),
 			Box::pin(self.db.send(Die)),
@@ -322,44 +322,39 @@ where
 	async fn main_loop(conf: SystemConfig<B, D>, rx: flume::Receiver<()>, client: Arc<C>) -> Result<()> {
 		let actors = Actors::spawn(&conf).await?;
 		actors.tick_interval(conf.executor.clone()).await?;
-		let pool = actors.db.send(GetState::Pool).await??.pool();
-		let listener = Self::init_listeners(&conf).await?;
-		let mut conn = pool.acquire().await?;
-		Self::restore_missing_storage(&mut *conn).await?;
-
-		let env = Environment::<B, B::Hash, R, C, D>::new(
-			conf.backend().clone(),
-			client,
-			actors.storage.clone(),
-			conf.tracing_targets.clone(),
-		);
-		let env = AssertUnwindSafe(env);
-
-		let runner = coil::Runner::builder(env, &pool)
-			.register_job::<crate::tasks::execute_block::Job<B, R, C, D>>()
-			.num_threads(conf.control.task_workers)
-			// times out if tasks don't start execution on the threadpool within 20 seconds.
-			.timeout(Duration::from_secs(conf.control.task_timeout))
-			.build()?;
-
+		// let pool = actors.db.send(GetState::Pool).await??.pool();
+		// let listener = Self::init_listeners(&conf).await?;
+		// let mut conn = pool.acquire().await?;
+		// Self::restore_missing_storage(&mut *conn).await?;
+		/*
+				let env = Environment::<B, B::Hash, R, C, D>::new(
+					conf.backend().clone(),
+					client,
+					actors.storage.clone(),
+					conf.tracing_targets.clone(),
+				);
+				let env = AssertUnwindSafe(env);
+		*/
+		/*
+				let runner = coil::Runner::builder(env, &pool)
+					.register_job::<crate::tasks::execute_block::Job<B, R, C, D>>()
+					.num_threads(conf.control.task_workers)
+					// times out if tasks don't start execution on the threadpool within 20 seconds.
+					.timeout(Duration::from_secs(conf.control.task_timeout))
+					.build()?;
+		*/
 		loop {
 			match rx.try_recv() {
 				Err(flume::TryRecvError::Empty) => (),
 				Err(flume::TryRecvError::Disconnected) => break,
 				Ok(_) => {
-					log::info!("Active Threads: {}, queued jobs: {}", runner.active_count(), runner.queued_count());
+					// log::info!("Active Threads: {}, queued jobs: {}", runner.active_count(), runner.queued_count());
 					log::info!("closing main loop");
 					break;
 				}
 			}
-
-			match runner.run_pending_tasks() {
-				Ok(_) => (),
-				Err(coil::FetchError::Timeout) => log::warn!("Tasks timed out"),
-				Err(e) => log::error!("{:?}", e),
-			}
 		}
-		listener.kill().await;
+		// listener.kill().await;
 		actors.kill().await?;
 		Ok(())
 	}
@@ -444,7 +439,7 @@ where
 				Err(_) => break, // everyone got the shutdown signal
 				Ok(_) => {
 					if count % 2 == 0 {
-						log::info!("Sending!");
+						log::info!("Sending! {}", count);
 					}
 					// some receivers may still be alive
 					std::thread::sleep(std::time::Duration::from_millis(20));
